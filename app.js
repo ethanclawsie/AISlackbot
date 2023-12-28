@@ -1,20 +1,44 @@
-const { App } = require("@slack/bolt");
-const { TextServiceClient } = require("@google-ai/generativelanguage");
-const { GoogleAuth } = require("google-auth-library");
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+  apiKey: "",
+});
+
+import bolt from "@slack/bolt";
+const { App } = bolt;
+import { TextServiceClient } from "@google-ai/generativelanguage";
+import { GoogleAuth } from "google-auth-library";
 
 const MODEL_NAME = "models/text-bison-001";
-const API_KEY = "Insert Key Here";
 
 const client = new TextServiceClient({
-  authClient: new GoogleAuth().fromAPIKey(API_KEY),
+  authClient: new GoogleAuth().fromAPIKey(
+    ""
+  ),
 });
 
 const app = new App({
-  token: "App Token Here",
-  signingSecret: "Signing Secret Here",
+  token: "",
+  signingSecret: "",
 });
 
 let lastRespondedTimestamp = "";
+
+async function generateImage(prompt) {
+  try {
+    const response = await openai.images.generate({
+      model: "dall-e-3",
+      prompt: prompt,
+      n: 1,
+      size: "512x512",
+    });
+    const imageUrl = response.data[0].url; 
+    return imageUrl;
+  } catch (error) {
+    console.error("Error generating image with DALL-E:", error);
+    return "https://via.placeholder.com/150?text=Error+Generating+Image";
+  }
+}
 
 async function fetchAndRespondWithLatestMessage(channelId) {
   try {
@@ -27,13 +51,12 @@ async function fetchAndRespondWithLatestMessage(channelId) {
       const latestMessage = result.messages[0];
       const promptString = latestMessage.text;
 
-      const botUserId = "Bot User Id Here";
+      const botUserId = ""; 
 
-      // Check for yapbot keyword
       if (
         latestMessage.user !== botUserId &&
         latestMessage.ts !== lastRespondedTimestamp &&
-        promptString.toLowerCase().includes("Slackbot")
+        promptString.toLowerCase().includes("textbot")
       ) {
         lastRespondedTimestamp = latestMessage.ts;
 
@@ -53,6 +76,32 @@ async function fetchAndRespondWithLatestMessage(channelId) {
           text: output,
         });
       }
+      
+      if (
+        latestMessage.user !== botUserId &&
+        latestMessage.ts !== lastRespondedTimestamp &&
+        promptString.toLowerCase().includes("imagebot")
+      ) {
+        lastRespondedTimestamp = latestMessage.ts;
+
+        const imageUrl = await generateImage(promptString);
+
+        await app.client.chat.postMessage({
+          channel: channelId,
+          text: "Here's your generated image", 
+          blocks: [
+            {
+              type: "image",
+              title: {
+                type: "plain_text",
+                text: "Generated Image",
+              },
+              image_url: imageUrl,
+              alt_text: "Generated Image",
+            },
+          ],
+        });
+      }
     }
   } catch (error) {
     console.error(error);
@@ -62,5 +111,5 @@ async function fetchAndRespondWithLatestMessage(channelId) {
 (async () => {
   await app.start(process.env.PORT || 3000);
   console.log("⚡️ Bolt app is running!");
-  setInterval(() => fetchAndRespondWithLatestMessage("Channel Id Here"), 5000);
+  setInterval(() => fetchAndRespondWithLatestMessage(""), 5000);
 })();
